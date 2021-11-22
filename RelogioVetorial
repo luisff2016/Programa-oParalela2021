@@ -1,0 +1,123 @@
+/**
+ * Código base (incompleto) para implementação de relógios vetoriais.
+ * Meta: implementar a interação entre três processos ilustrada na figura
+ * da URL: 
+ * 
+ * https://people.cs.rutgers.edu/~pxk/417/notes/images/clocks-vector.png
+ * 
+ * Compilação: mpicc -o rvet rvet.c
+ * Execução:   mpiexec -n 3 ./rvet
+ */
+ 
+#include <stdio.h>
+#include <string.h>  
+#include <mpi.h>     
+
+
+typedef struct Clock { 
+   int p[3];
+} Clock;
+
+
+void Event(int pid, Clock *clock);
+
+void Send(int pidSend, int pidRecp, Clock *clock);
+
+void Receive( int pidRecp, int pidSend, Clock *clock);
+
+void ClocksComparison(int pid1, int pid2, Clock *clockE, Clock *clockR);
+
+// Representa o processo de rank 0
+void process0();
+
+// Representa o processo de rank 1
+void process1();
+
+// Representa o processo de rank 2
+void process2();
+
+int main(void) {
+   int my_rank;               
+
+   MPI_Init(NULL, NULL); 
+   MPI_Comm_rank(MPI_COMM_WORLD, &my_rank); 
+
+   if (my_rank == 0) { 
+      process0();
+   } else if (my_rank == 1) {  
+      process1();
+   } else if (my_rank == 2) {  
+      process2();
+   }
+
+   /* Finaliza MPI */
+   MPI_Finalize(); 
+
+   return 0;
+}  /* main */
+
+void Event(int pid, Clock *clock){
+   clock->p[pid]++; 
+   printf(">Process: %d, Clock: (%d, %d, %d)\n", pid, clock->p[0], clock->p[1], clock->p[2] );  
+}
+
+
+void Send(int pidSend, int pidRecp, Clock *clock){
+   Event(pidSend, clock);
+   MPI_Send(clock, 3, MPI_INT, pidRecp, 0, MPI_COMM_WORLD); 
+}
+
+void Receive( int pidRecp, int pidSend, Clock *clock){
+   Clock clockRecebido ;
+   MPI_Recv(&clockRecebido, 3, MPI_INT, pidSend, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+   switch(pidRecp){
+      case 0: ClocksComparison( 1, 2, &clockRecebido, clock ); break;
+      case 1: ClocksComparison( 0, 2, &clockRecebido, clock ); break;
+      case 2: ClocksComparison( 0, 1, &clockRecebido, clock ) ; break;
+   }
+
+   Event(pidRecp, clock);
+}
+
+// Representa o processo de rank 0
+void process0(){
+   Clock clock = {{0,0,0}};
+   Event(0, &clock);
+   Send(0, 1, &clock);
+   Receive(0, 1, &clock);
+   Send(0, 2, &clock);
+   Receive(0, 2, &clock);
+   Send(0, 1, &clock);
+   Event(0, &clock);
+
+}
+
+// Representa o processo de rank 1
+void process1(){
+   Clock clock = {{0,0,0}};
+   Send(1, 0, &clock);
+   Receive(1, 0, &clock);
+   Receive(1, 0, &clock);
+}
+
+// Representa o processo de rank 2
+void process2(){
+   Clock clock = {{0,0,0}};
+   Event(2, &clock);
+   Send(2, 0, &clock);
+   Receive(2, 0, &clock);
+
+   
+   // TO DO
+}
+
+void ClocksComparison(int pid1, int pid2, Clock *clockE, Clock *clockR)
+{
+   if(clockE->p[pid1] >= clockR->p[pid1])
+   clockR->p[pid1] = clockE->p[pid1];
+   
+   if(clockE->p[pid2] >= clockR->p[pid2])
+   clockR->p[pid2] = clockE->p[pid2];
+   
+}
